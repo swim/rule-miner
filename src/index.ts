@@ -1,0 +1,11 @@
+export { normalize, prepare, rawSegments, segmentTokens, tokenize, validateLexicon, type Lexicon } from './text.ts';
+export { canonicalKey, describe, patternKey, regexSources, type Pattern } from './pattern.ts';
+export { anyRule, canonicalSegments, compileRule, hitMatrix, withExceptions, type MatchableRule } from './match.ts';
+export { mineRules, type MinedRule, type MineInput, type MineOptions } from './mine.ts';
+export { mineExceptions, type ExceptionOptions, type ExceptionResult, type MinedException } from './exceptions.ts';
+export { checkConsistency, evaluateFired, validateRules, type RuleSetEvaluation } from './evaluate.ts';
+export { certifyPrefixes, precisionLowerBound, type Certification } from './certify.ts';
+export { exceptionStressItems, ruleStressItems, stressTest, type StressItem, type StressResult } from './stress.ts';
+export { induceClasses } from './lexicon.ts';
+export { ENGLISH_STOPWORDS } from './stopwords.ts';
+export { buildRuleSet, diffRuleSets, firingReport, LEGACY_RULESET_FORMATS, RULESET_FORMAT, ruleSetMatcher, validateRuleSet, type RuleSet, type RuleSetMatcher, type RuleSetRule } from './ruleset.ts';

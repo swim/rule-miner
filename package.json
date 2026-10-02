@@ -1,0 +1,44 @@
+{
+  "name": "@liquidau/rule-miner",
+  "version": "0.3.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "Mine high-precision, human-readable rules from labelled text and compile them to linear-time regex: group-aware sequential covering with stopword and background-corpus filters, validation and evaluation, and a validated rule-set artifact for runtime.",
+  "keywords": [
+    "rule-learning",
+    "rule-mining",
+    "regex",
+    "text-classification",
+    "weak-supervision",
+    "interpretable-ml"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@liquidau/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "test": "node --conditions=@liquidau/source --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@liquidau/solvers": "^0.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}
