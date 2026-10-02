@@ -1,6 +1,6 @@
 {
   "name": "@liquidau/rule-miner",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "MIT",
   "description": "Mine high-precision, human-readable rules from labelled text and compile them to linear-time regex: group-aware sequential covering with stopword and background-corpus filters, validation and evaluation, and a validated rule-set artifact for runtime.",
   "keywords": [
