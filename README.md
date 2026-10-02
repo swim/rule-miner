@@ -96,6 +96,10 @@ npm run build
 ```
 
 The compiled package (`dist/`) runs on Node 20+. The test suite runs the `.ts` sources directly,
-which needs Node's built-in type stripping: **Node 22.18+ or 23.6+**. `@liquidau/solvers` is a
-private package on the npm registry, so you need to be logged in as a member of the `@liquidau` org
-(or have a read token in `.npmrc`) to install.
+which needs Node's built-in type stripping: **Node 22.18+ or 23.6+**. The one runtime dependency,
+[`@liquidau/solvers`](https://www.npmjs.com/package/@liquidau/solvers), is public on npm, so no
+login or token is needed to install.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
