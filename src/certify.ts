@@ -10,6 +10,8 @@
  */
 import { clopperPearsonUpper } from '@liquidau/solvers';
 
+import { checkBackgroundRecords, type RecordLike } from './provenance.ts';
+
 export interface Certification {
   /** How many leading rules are certified. */
   certified: number;
@@ -17,9 +19,21 @@ export interface Certification {
 }
 
 /** fired[r][i]: does rule r (in mining order) fire on certification text i. */
-export function certifyPrefixes(fired: ReadonlyArray<readonly boolean[]>, options: { maxRate: number; confidence?: number }): Certification {
-  const { maxRate, confidence = 0.95 } = options;
+export function certifyPrefixes(
+  fired: ReadonlyArray<readonly boolean[]>,
+  options: {
+    maxRate: number;
+    confidence?: number;
+    /** The certification texts as records, one per column: checked to be unlabelled traffic with backgroundUse 'certify' (P2, P3). */
+    records?: readonly RecordLike[];
+  },
+): Certification {
+  const { maxRate, confidence = 0.95, records } = options;
   const n = fired[0]?.length ?? 0;
+  if (records) {
+    if (records.length !== n) throw new Error(`records has ${records.length} entries for ${n} certification texts`);
+    checkBackgroundRecords(records, ['certify']);
+  }
   const union = new Array<boolean>(n).fill(false);
   const rows: Certification['rows'] = [];
   let certified = 0;

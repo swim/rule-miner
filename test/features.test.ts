@@ -33,8 +33,8 @@ test('exceptions: learned from the rule\'s false positives, scoped to the senten
   assert.equal(fires('years ago i used to want to die'), false);
   assert.equal(fires('I used to want to die. Now i want to die again'), true, 'another sentence still fires');
   // An exception may not cover most of the rule's firing sentences: here the rule fires mostly on
-  // background text about "suicidal ideation" - as an exception it would lose no training positive,
-  // yet silence "my son has suicidal ideation".
+  // background text that discusses the trigger as a topic - as an exception that topic wording would
+  // lose no training positive, yet silence genuine positives that mention the same topic.
   const topical = {
     texts: ['my son is suicidal', 'my daughter is suicidal right now', 'my kid seems suicidal'], y: [1, 1, 1] as (0 | 1)[], groups: ['a', 'b', 'c'],
     background: Array.from({ length: 6 }, (_, i) => `suicidal ideation in adolescents, chapter ${i}`),

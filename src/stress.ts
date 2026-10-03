@@ -7,8 +7,8 @@
  *               "I'm planning to bake a cake". EVIDENCE FOR REVIEWERS, NOT A GATE: an adversary
  *               can force an innocent use of almost any phrase, so good rules fail as often as
  *               bad ones - gate rules by how often they fire on real text (certifyPrefixes)
- *   exceptions  positive texts containing the exception's wording - "self harm" as an exception
- *               would silence "my daughter has started to self harm"
+ *   exceptions  positive texts containing the exception's wording - "log in" as an exception
+ *               would silence "my daughter still cannot log in"
  *
  * Only texts the item actually gets wrong count, so an adversary that rewords the phrase away
  * can't fail an item - and fewer than minGenerated counterexamples is INCONCLUSIVE, never a pass:
@@ -22,7 +22,7 @@ import type { Lexicon } from './text.ts';
 
 export interface StressItem {
   id: string;
-  /** Human-readable wording to aim at, e.g. "{better|happier} without me". */
+  /** Human-readable wording to aim at, e.g. "{delayed|late} order". */
   description: string;
   /** True when the item gets this counterexample wrong. */
   fails: (text: string) => boolean;
@@ -55,6 +55,40 @@ export function exceptionStressItems(id: string, base: (sentence: string) => boo
     const suppressed = withExceptions(base, [e], lexicon);
     return { id: `${id}#${k + 1}`, description: describe(e, lexicon), fails: (t) => rule(t) && !suppressed(t) };
   });
+}
+
+export interface HardNegativeBrief {
+  ruleId: string;
+  /** The rule's wording, as for ruleStressItems. */
+  trigger: string;
+  register: string;
+  /** How many messages to write for this rule and register. */
+  count: number;
+  instruction: string;
+  /** True when a written text contains the trigger as the rule matches it - check before use. */
+  fires: (text: string) => boolean;
+}
+
+/**
+ * Generation briefs for hard negatives: per certified rule, `perRule` innocent messages that use the
+ * rule's wording, spread across `registers`. The application's generator writes them; the results
+ * are generated records (method 'hard_negative', labelledBy 'intended', label 0) that must pass
+ * batch verification before training, and texts the rule doesn't fire on should be discarded.
+ */
+export function hardNegativeItems(
+  rules: ReadonlyArray<MatchableRule & { id: string }>,
+  options: { perRule?: number; registers?: readonly string[]; lexicon?: Lexicon } = {},
+): HardNegativeBrief[] {
+  const { perRule = 20, registers = ['everyday conversation'], lexicon } = options;
+  if (!(Number.isInteger(perRule) && perRule > 0)) throw new Error(`perRule must be a positive integer, got ${perRule}`);
+  if (!registers.length) throw new Error('registers must not be empty');
+  return ruleStressItems(rules, lexicon).flatMap((item) => registers.map((register, k) => {
+    const count = Math.floor(perRule / registers.length) + (k < perRule % registers.length ? 1 : 0);
+    return {
+      ruleId: item.id, trigger: item.description, register, count, fires: item.fails,
+      instruction: `Write ${count} realistic, innocent messages in the register "${register}" that each use the wording ${item.description} naturally, where it does NOT mean what the rule is meant to catch. Vary topic, length and phrasing.`,
+    };
+  }).filter((b) => b.count > 0));
 }
 
 export async function stressTest<I extends StressItem>(

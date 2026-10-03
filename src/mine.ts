@@ -15,6 +15,7 @@
  */
 import { compileRule, canonicalSegments } from './match.ts';
 import { canonicalKey, patternKey, regexSources, tokenCount, type Pattern } from './pattern.ts';
+import { backgroundTexts, type RecordLike } from './provenance.ts';
 import { ENGLISH_STOPWORDS } from './stopwords.ts';
 import { prepare, type Lexicon } from './text.ts';
 
@@ -52,6 +53,8 @@ export interface MineInput {
   authors?: readonly string[];
   /** Unlabelled, mostly-negative text from the deployment domain. */
   background?: readonly string[];
+  /** The background as records instead of texts: checked to be unlabelled traffic with backgroundUse 'veto' (P2, P3). */
+  backgroundRecords?: readonly RecordLike[];
 }
 
 export interface MinedRule {
@@ -117,7 +120,9 @@ export function mineRules(input: MineInput, options: MineOptions = {}): MinedRul
   const { maxN = 4, minGroups = 3, minAuthors = 1, maxFalsePositives = 0, maxBackgroundRate = 0, maxRules = 25, minGain = 1 } = options;
   const { conjunctions = true, conjunctionPool = 300, stopwords = ENGLISH_STOPWORDS, prefer = 'specific', lexicon } = options;
   const rejected = new Set(Array.from(options.rejected ?? [], canonicalKey));
-  const { texts, y, background = [] } = input;
+  if (input.backgroundRecords && input.background) throw new Error('pass background or backgroundRecords, not both');
+  const { texts, y } = input;
+  const background = input.backgroundRecords ? backgroundTexts(input.backgroundRecords, 'veto') : input.background ?? [];
   if (y.length !== texts.length) throw new Error(`y has ${y.length} entries for ${texts.length} texts`);
   if (input.groups && input.groups.length !== texts.length) throw new Error(`groups has ${input.groups.length} entries for ${texts.length} texts`);
   if (input.authors && input.authors.length !== texts.length) throw new Error(`authors has ${input.authors.length} entries for ${texts.length} texts`);

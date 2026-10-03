@@ -1,8 +1,8 @@
 /**
  * Rule patterns over canonical tokens (plain tokens or "<class>"), and their regexes.
  *
- *   phrase  consecutive tokens within one sentence: "better off without me"
- *   all     every phrase in the same sentence, any order: "giving" & "things away"
+ *   phrase  consecutive tokens within one sentence: "cancel my subscription"
+ *   all     every phrase in the same sentence, any order: "charged" & "two times"
  *
  * A regex runs against one canonical sentence (tokens joined by single spaces) and is a literal
  * between space/edge boundaries - linear time by construction.
@@ -37,7 +37,7 @@ export function regexSources(pattern: Pattern): string[] {
   return phrasesOf(pattern).map((p) => `(?:^| )${p.map(escape).join(' ')}(?= |$)`);
 }
 
-/** For reviewers: classes spelled out, e.g. "{better|happier} without me". */
+/** For reviewers: classes spelled out, e.g. "{delayed|late} order". */
 export function describe(pattern: Pattern, lexicon?: Lexicon): string {
   const word = (t: string) => {
     const members = /^<(.+)>$/.exec(t) && lexicon?.classes?.[t.slice(1, -1)];

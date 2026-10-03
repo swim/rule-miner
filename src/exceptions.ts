@@ -16,8 +16,13 @@
  * to use can't be checked here - stress-test exceptions with positive counterexamples too.
  *
  * When `base` returns the text it matched, an exception may not reuse the trigger's words: the
- * rule fired BECAUSE of "self-harm", so an exception "self harm" could only tell spellings of the
- * trigger apart - always spurious, and it would silence "she has started to self harm".
+ * rule fired BECAUSE of "log-in", so an exception "log in" could only tell spellings of the
+ * trigger apart - always spurious, and it would silence "she still cannot log in".
+ *
+ * `validateOn` (real, human-labelled training text): after every other guard, an exception is
+ * kept only if, on that data, it removes at least one false positive and no true positive. It is
+ * REQUIRED when any input text is generated (`sources`), since generated hard negatives can show an
+ * exception is plausible but never that it is safe.
  */
 import type { Pattern } from './pattern.ts';
 import { ENGLISH_STOPWORDS } from './stopwords.ts';
@@ -38,6 +43,8 @@ export interface ExceptionOptions {
   /** Stopword-only exceptions need at least two tokens ("what if"), single ones are too broad. */
   stopwords?: ReadonlySet<string>;
   lexicon?: Lexicon;
+  /** Real, human-labelled training text: each exception must remove a false positive here and no true positive. */
+  validateOn?: { texts: readonly string[]; y: ReadonlyArray<0 | 1> };
 }
 
 export interface MinedException {
@@ -52,6 +59,8 @@ export interface ExceptionResult {
   after: { positives: number; negatives: number; background: number };
   /** Why no exceptions were mined, when that wasn't for lack of a good candidate. */
   skipped?: string;
+  /** Exceptions the other guards accepted but validateOn rejected. */
+  rejected?: Array<{ pattern: Pattern; reason: string }>;
 }
 
 interface Fired {
@@ -74,13 +83,23 @@ function phraseSet(tokens: string[], maxN: number): Set<string> {
 }
 
 export function mineExceptions(
-  input: { texts: readonly string[]; y: ReadonlyArray<0 | 1 | null>; groups?: readonly string[]; background?: readonly string[] },
+  input: {
+    texts: readonly string[];
+    y: ReadonlyArray<0 | 1 | null>;
+    groups?: readonly string[];
+    background?: readonly string[];
+    /** Where each text came from; any 'generated' text makes options.validateOn required. */
+    sources?: ReadonlyArray<{ kind: string } | undefined>;
+  },
   /** Fires on a sentence: true, or (better) the matched text, which enables the trigger guard. */
   base: (sentence: string) => boolean | string,
   options: ExceptionOptions = {},
 ): ExceptionResult {
-  const { maxN = 3, minGroups = 2, maxLostGroups = 0, maxExceptions = 10, minGain = 1, maxShare = 0.5, minPositiveGroups = 3, stopwords = ENGLISH_STOPWORDS, lexicon } = options;
+  const { maxN = 3, minGroups = 2, maxLostGroups = 0, maxExceptions = 10, minGain = 1, maxShare = 0.5, minPositiveGroups = 3, stopwords = ENGLISH_STOPWORDS, lexicon, validateOn } = options;
   if (input.y.length !== input.texts.length) throw new Error(`y has ${input.y.length} entries for ${input.texts.length} texts`);
+  if (input.sources && input.sources.length !== input.texts.length) throw new Error(`sources has ${input.sources.length} entries for ${input.texts.length} texts`);
+  if (input.sources?.some((s) => s?.kind === 'generated') && !validateOn) throw new Error('some input texts are generated: pass validateOn (real, human-labelled training text) so every exception is checked on real data');
+  if (validateOn && validateOn.y.length !== validateOn.texts.length) throw new Error(`validateOn.y has ${validateOn.y.length} entries for ${validateOn.texts.length} texts`);
   if (input.groups && input.groups.length !== input.texts.length) throw new Error(`groups has ${input.groups.length} entries for ${input.texts.length} texts`);
   const groups = input.groups ?? input.texts.map((_, i) => `#${i}`);
   const unitOf = (text: string, group: string, kind: Unit['kind']): Unit | null => {
@@ -141,5 +160,23 @@ export function mineExceptions(
       stats: { fixed: best.fixed.length, fixed_groups: best.gain, lost_groups: best.lost },
     });
   }
-  return { exceptions, before, after: count() };
+  if (!validateOn) return { exceptions, before, after: count() };
+
+  // Each exception, alone, on real labelled data: it must remove a false positive and no true positive.
+  const real = validateOn.texts.map((t, i) => ({ unit: unitOf(t, `v#${i}`, validateOn.y[i] === 1 ? 'pos' : 'neg'), y: validateOn.y[i] }));
+  const removes = (key: string, u: Unit) => u.fired.every((s) => s.phrases.has(key));
+  const rejected: NonNullable<ExceptionResult['rejected']> = [];
+  const kept = exceptions.filter((e) => {
+    const key = (e.pattern as { tokens: string[] }).tokens.join(' ');
+    const fixed = real.filter((r) => r.unit && r.y === 0 && removes(key, r.unit)).length;
+    const lost = real.filter((r) => r.unit && r.y === 1 && removes(key, r.unit)).length;
+    if (lost > 0 || fixed === 0) {
+      rejected.push({ pattern: e.pattern, reason: lost > 0 ? `silences ${lost} real positive(s) in validateOn` : 'removes no real false positive in validateOn' });
+      return false;
+    }
+    return true;
+  });
+  chosen.length = 0;
+  chosen.push(...kept.map((e) => (e.pattern as { tokens: string[] }).tokens.join(' ')));
+  return { exceptions: kept, before, after: count(), rejected };
 }
