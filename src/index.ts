@@ -9,3 +9,4 @@ export { exceptionStressItems, ruleStressItems, stressTest, type StressItem, typ
 export { induceClasses } from './lexicon.ts';
 export { ENGLISH_STOPWORDS } from './stopwords.ts';
 export { buildRuleSet, diffRuleSets, firingReport, LEGACY_RULESET_FORMATS, RULESET_FORMAT, ruleSetMatcher, validateRuleSet, type RuleSet, type RuleSetMatcher, type RuleSetRule } from './ruleset.ts';
+export { disagreementQueues, ruleBounds, ruleSetHash, weakLabels, type DisagreementQueues, type QueueItem, type RuleBound, type RuleBounds, type RuleBoundsInput, type WeakLabel, type WeakLabelOptions, type WeakLabelResult } from './weak.ts';
