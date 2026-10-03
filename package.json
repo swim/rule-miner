@@ -43,7 +43,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@liquidau/solvers": "^0.2.0"
+    "@liquidau/solvers": "^0.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

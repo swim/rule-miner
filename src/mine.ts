@@ -25,7 +25,11 @@ export interface MineOptions {
   /** Distinct authors among a rule's positives (default 1). Pass `authors` = who originated each text's wording. */
   minAuthors?: number;
   maxFalsePositives?: number;
-  /** Highest share of background texts a rule may match (default 0). */
+  /**
+   * Highest share of background texts a rule may match (default 0). Background is unlabelled real
+   * traffic, so it holds positives at production prevalence and a good rule fires on them too: keep
+   * this above what correct catches alone would cost, or veto on labelled negatives instead.
+   */
   maxBackgroundRate?: number;
   maxRules?: number;
   minGain?: number;

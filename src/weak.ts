@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import { clopperPearsonUpper } from '@liquidau/solvers';
 
 import { precisionLowerBound } from './certify.ts';
+import { designRate, type SampleDesign } from './design.ts';
 import { canonicalSegments, hitMatrix } from './match.ts';
 import type { RuleSet, RuleSetRule } from './ruleset.ts';
 
@@ -48,8 +49,12 @@ export interface RuleBounds {
 export interface RuleBoundsInput {
   /** Held-out ordinary text, as passed to certifyPrefixes - never the mining background. */
   certification: readonly string[];
-  /** Held-out labelled data (e.g. the calibration split) - never the texts the rules were mined on. */
-  gold: { texts: readonly string[]; y: ReadonlyArray<0 | 1 | null>; groups?: readonly string[] };
+  /**
+   * Held-out labelled data (e.g. the calibration split) - never the texts the rules were mined on.
+   * With `design` (a stratified sample), recall is weighted by 1/π and bounded design-based (exact
+   * per-stratum bounds); groups are then ignored, since a sampled frame holds one item per group.
+   */
+  gold: { texts: readonly string[]; y: ReadonlyArray<0 | 1 | null>; groups?: readonly string[]; design?: SampleDesign };
   /** Production prevalence of the label. */
   prevalence: number;
   /** Which label's rules (default: the rule set's only label). */
@@ -105,7 +110,15 @@ export function ruleBounds(set: RuleSet, input: RuleBoundsInput): RuleBounds {
       // Each group contributes the share of its members caught; rounding down keeps the count conservative.
       const caught = Math.floor(goldHits[r].reduce((sum, f, j) => sum + (f ? 1 / groupSize.get(groupOf(j))! : 0), 0) + 1e-9);
       const fireUpper = clopperPearsonUpper(hits, certification.length, perStatement);
-      const recallLower = clopperPearsonLower(caught, groupSize.size, perStatement);
+      let recallLower = clopperPearsonLower(caught, groupSize.size, perStatement);
+      if (gold.design) {
+        // Design-based: the rule's recall over all labelled positives, weighted by 1/π.
+        const firesAll = hitMatrix([rule], gold.texts, set.lexicon)[0];
+        const keep = gold.y.map((v) => v === 0 || v === 1);
+        const sub = <T>(xs: readonly T[]) => xs.filter((_, i) => keep[i]);
+        const d = { inclusionProbs: sub(gold.design.inclusionProbs), strata: sub(gold.design.strata), stratumSizes: gold.design.stratumSizes };
+        recallLower = designRate(sub(firesAll), sub(gold.y).map((v) => v === 1), d, 'lower', perStatement, 'exact').bound;
+      }
       return {
         id: rule.id, cert_hits: hits, cert_n: certification.length, fire_rate_upper: fireUpper,
         gold_caught: caught, gold_positives: groupSize.size, recall_lower: recallLower,

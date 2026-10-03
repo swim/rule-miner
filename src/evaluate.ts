@@ -1,6 +1,8 @@
 /** Validating, evaluating and sanity-checking rules - always through the compiled regexes. */
 import { wilson } from '@liquidau/solvers';
 
+import { designRate, type BoundMethod, type SampleDesign } from './design.ts';
+
 import { hitMatrix, type MatchableRule } from './match.ts';
 import { phrasesOf, type Pattern } from './pattern.ts';
 import { prepare, type Lexicon } from './text.ts';
@@ -28,10 +30,19 @@ export interface RuleSetEvaluation {
   false_alarms: number;
   false_alarm_rate: number;
   false_alarm_ci95: [number, number];
+  /** 'design': recall and false alarms are weighted by 1/π and their intervals design-based (each side at 97.5%). */
+  method?: 'counts' | 'design';
 }
 
-/** Recall and false alarms of any per-example "fired" vector on the labelled examples. */
-export function evaluateFired(fired: readonly boolean[], y: ReadonlyArray<0 | 1 | null>): RuleSetEvaluation {
+/**
+ * Recall and false alarms of any per-example "fired" vector on the labelled examples. Counts and
+ * Wilson intervals by default; with `design` (a stratified sample, e.g. sampled test records),
+ * rates weighted by 1/π with design-based intervals - unweighted counts of a stratified sample are biased.
+ * The default `method` here is 'linearised' (with an exact floor at the effective size), matching
+ * embedding-classifier's evaluation; 'exact' per-stratum bounds suit certification, not reporting.
+ */
+export function evaluateFired(fired: readonly boolean[], y: ReadonlyArray<0 | 1 | null>, options: { design?: SampleDesign; method?: BoundMethod } = {}): RuleSetEvaluation {
+  if (fired.length !== y.length) throw new Error(`fired has ${fired.length} entries for ${y.length} labels`);
   let positives = 0, caught = 0, negatives = 0, falseAlarms = 0;
   y.forEach((v, i) => {
     if (v === 1) {
@@ -42,10 +53,26 @@ export function evaluateFired(fired: readonly boolean[], y: ReadonlyArray<0 | 1 
       if (fired[i]) falseAlarms++;
     }
   });
-  return {
+  const counts: RuleSetEvaluation = {
     positives, caught, recall: positives ? caught / positives : NaN, recall_ci95: wilson(caught, positives),
     negatives, false_alarms: falseAlarms, false_alarm_rate: negatives ? falseAlarms / negatives : NaN, false_alarm_ci95: wilson(falseAlarms, negatives),
+    method: 'counts',
   };
+  if (!options.design) return counts;
+  // Labelled units only; recall over positives, false alarms over negatives.
+  const keep = y.map((v) => v === 0 || v === 1);
+  const sub = <T>(xs: readonly T[]) => xs.filter((_, i) => keep[i]);
+  const d = { inclusionProbs: sub(options.design.inclusionProbs), strata: sub(options.design.strata), stratumSizes: options.design.stratumSizes };
+  const f = sub(fired), yy = sub(y);
+  const interval = (domain: boolean[]): [number, number, number] => {
+    if (!domain.some(Boolean)) return [NaN, 0, 1];
+    const lo = designRate(f, domain, d, 'lower', 0.975, options.method ?? 'linearised');
+    const hi = designRate(f, domain, d, 'upper', 0.975, options.method ?? 'linearised');
+    return [lo.estimate, lo.bound, hi.bound];
+  };
+  const [recall, rLo, rHi] = interval(yy.map((v) => v === 1));
+  const [far, fLo, fHi] = interval(yy.map((v) => v === 0));
+  return { ...counts, recall, recall_ci95: [rLo, rHi], false_alarm_rate: far, false_alarm_ci95: [fLo, fHi], method: 'design' };
 }
 
 function tokenMatch(pattern: Pattern, sentence: string[]): boolean {
