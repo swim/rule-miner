@@ -1,107 +1,84 @@
 # @liquidau/rule-miner
 
-Mines **high-precision, human-readable rules** from labelled text and compiles them to
-**linear-time regex**. It then attacks those rules, certifies them and tracks them over time, so
-that a deterministic rule layer (a safety floor, an escalation trigger, a routing shortcut) is
-grown from data instead of by hand, and is never trusted further than the evidence allows.
+Learns short phrase rules from labelled text, checks how often they fire on ordinary text, and
+compiles them to linear-time regex.
 
 ```
-labelled text ─► mine ─► validate ─► stress-test ─► certify ─► rule set ─► review ─► runtime ─► monitor / diff
-                 │                    (adversarial    (exact 95%            (accepted /           (firing report,
-                 │                     counterexamples) bound on firing)     rejected feed back)   rule-set diff)
-                 └─ exceptions for existing rules (sentence-scoped, guarded)
+labelled text + ordinary background text
+        │
+        ▼
+mineRules ──► validateRules ──► certify* ──► buildRuleSet ──► ruleSetMatcher
+   ▲                                                                │
+   │                                                                ▼
+accepted / rejected ◄────────── human review ◄──────── firingReport, diffRuleSets
+
+certify*:       certifyFalseAlarms (≤ r of labelled negatives, 95%), or
+                certifyPrefixes (fires on ≤ r of unlabelled traffic, 95%)
+mineExceptions: "fire unless…" for any existing rule, including hand-written regex
+weakLabels:     rule hits as weighted training data for @liquidau/embedding-classifier
 ```
 
-## Features
+Uses [`@liquidau/solvers`](https://www.npmjs.com/package/@liquidau/solvers) for exact bounds; pair it
+with [`@liquidau/embedding-classifier`](https://www.npmjs.com/package/@liquidau/embedding-classifier) for recall.
 
-| | What | Why |
-|---|---|---|
-| **Mining** (`mineRules`) | Sequential covering over 1–`maxN`-token phrases and same-sentence phrase pairs. Each **group** (a seed and its paraphrases) weighs 1. Stopword-only phrases are refused. Rules are vetoed if they fire on a **background corpus**. Lazy greedy search | Labelled negatives can't show a rule fires on ordinary text; a background corpus in the users' register can |
-| **Author support** (`authors`, `minAuthors`) | A rule must be supported by texts originated by several authors | One writer's habits ("to be fair…") aren't a signal |
-| **Exceptions** (`mineExceptions`, `withExceptions`) | "Fire unless…" phrases for any existing sentence-level rule, including hand-written regex, learned from its false positives and applied within the sentence it fired in | Repairs the precision of rules you already have |
-| **Lexicon** (`Lexicon`, `induceClasses`) | Slang replacements ("wanna" → "want to") and word classes (`<delayed>` = {delayed, delaying, delays}). Classes can be proposed from any word embeddings | Rules generalise beyond the exact training wording |
-| **Stress test** (`stressTest`, `exceptionStressItems`, `ruleStressItems`) | An adversary writes texts aimed at each item. For exceptions: genuine positives containing the exception's wording; any it silences fails it. For rules: ordinary texts containing the rule's wording, as reviewer evidence. Too few counterexamples is *inconclusive*, never a pass | Exceptions: a fail-safe gate. Rules: examples for reviewers, **not a gate** (see Evidence) |
-| **Certification** (`certifyPrefixes`, `certifyFalseAlarms`, `precisionLowerBound`) | Fixed-sequence testing over rule prefixes. `certifyPrefixes`: "with 95% confidence the first *k* rules fire on ≤ *r* of ordinary text", a firing-rate statement in which correct catches count too. `certifyFalseAlarms`: "… fire on ≤ *r* of negatives", on labelled negatives, exact or design-based for a stratified sample. With `frame`, the rules' known firing on the whole sampling frame caps each stratum's false alarms exactly | A statement a reviewer can sign off; the false-alarm version doesn't spend its budget on correct catches |
-| **Design weights** (`evaluateFired`, `ruleBounds`, `designRate` with `design`) | On a stratified sample (e.g. sampled calibration or test records), recall and false alarms are weighted by 1/π, with exact or linearised design-based bounds | Unweighted counts of a stratified sample are biased: in a test, more than twice the true false-alarm rate |
-| **Weak supervision** (`ruleBounds`, `weakLabels`, `disagreementQueues`, `ruleSetHash`) | Per-rule production precision lower bounds (exact firing-rate and recall bounds, jointly at 95%). Texts a rule fires on become **weak positives** weighted by that bound. Held-out texts are dropped, strong classifier disagreements go to review, near-duplicates count once, and no rule supplies more than `maxRuleShare` of the weight. Rule/classifier disagreements and near-threshold texts become a **labelling queue**. A non-firing text is never a label | Lets the rule floor feed a classifier's training data without the classifier learning to imitate it |
-| **Data sourcing** (`hardNegativeItems`, `validateOn`, `checkBackgroundRecords`) | Generation briefs for hard negatives per certified rule. Exceptions can be required to remove a real false positive and no real positive on human-labelled data, which is mandatory when any input is generated. Background records are checked to be unlabelled traffic with one use, veto for `mineRules` and certify for `certifyPrefixes` | Generated data may suggest an exception but never prove it safe; a background used to mine must not also certify |
-| **Governance** (`buildRuleSet`, `validateRuleSet`, `ruleSetMatcher`, `firingReport`, `diffRuleSets`, `accepted` / `rejected`) | A versioned artifact whose regexes are re-derived on load; per-rule firing on live or exported traffic; every text whose outcome changes between versions; review decisions fed back into mining | Keeps the rule layer maintainable |
+## Install
 
-## Safety properties
-
-- **Linear time:** each rule is a set of space-bounded literals matched per sentence of
-  canonical text. `validateRuleSet` re-derives every regex from its pattern, so a hand-edited or
-  catastrophic regex can't load.
-- **Canonical text:** NFKC, folded apostrophes, lower case, sentences, Unicode-aware tokens, and
-  the lexicon. Mining and matching use the same function, and `checkConsistency` verifies that the
-  regexes and a direct token matcher agree.
-- **Exception guards.** Each one was added after it caught a real failure:
-  - **Evidence.** No exceptions are mined for a rule that catches fewer than
-    `minPositiveGroups` positive groups, since with nothing to lose every exception looks free.
-  - **Share.** An exception may not appear in more than `maxShare` of the rule's firing
-    sentences; otherwise it is a deletion, not an exception.
-  - **Trigger.** When `base` returns the text it matched, an exception may not reuse the
-    trigger's words ("log in" can't except a log-in rule).
-- **Stress results are never optimistic.** An adversary or judge that produced fewer than
-  `minGenerated` counterexamples yields `inconclusive`, never `passed`.
-
-## Evidence
-
-The evidence comes from a production support chat. Training data was 1 author's 657 seeds,
-another model's paraphrases, and 312 independent messages. Every decision was made on a dev set;
-the results below come from a **held-out probe and background written by two other model
-families, run once**:
-
-| Feature | Held-out result |
-|---|---|
-| Mining with a background corpus | Mined rules catch 11 of 140 positive messages per head, where hand-written rules catch 1–2 |
-| Lexicon (replacements + embedding classes) | Recall: head A 11 → 18 of 140, head B 2 → 5 of 40. External false alarms rose 9 → 27 of 1,837, all from rules certification refused |
-| Certification (≤ 0.2% at 95%) | **Held on independent text:** 0.163%, 0.054% and 0.054% for the certified prefixes; the uncertified tail fired on 1.47% |
-| Exceptions (unstressed) | Hand-written rules' false alarms 11 → 7 (test) and 6 → 5 (probe), no positives lost |
-| Stress test | Rejected 5 exceptions that silenced plausible positive messages ("if my", "past", "my child"). For rules it **doesn't discriminate**: a control run failed hand-written rules intended by domain experts (81–100% hit rate) and deliberately bad words (84–95%) about as often as mined rules (74–88%), and a weak adversary did about as well as a strong one. It shows an innocent use *can be written*, not how often one occurs |
-| Author support | Dev: false alarms −2 on the probe and −4 on the background, for one fewer cross-author catch (11 → 10) |
-| Governance | Rule-set diff surfaced a new false alarm; firing report pinpointed the noisiest rules |
-
-**What to expect:** learned lexical rules reach high precision and modest recall. Treat them as
-**candidates for review**, gate them by **certification** (how often they fire on real-register
-text), and keep a statistical classifier for recall.
-
-The stress test is a gate for exceptions, where a contrived counterexample can only cause a safe
-rejection. For rules it is reviewer evidence only: an adversary can force an innocent use of
-almost any phrase. LLM judges are not labels either. In the same study they agreed with gold
-labels near chance on indirectly worded positives, while agreeing on clear-cut texts.
-
-Not included: gapped patterns ("my <0–3 words> wants a refund"). Same-sentence conjunctions
-already cover their recall, and certification covers their precision cost.
+```bash
+npm install @liquidau/rule-miner
+```
 
 ## Example
 
 ```ts
-import { mineRules, validateRules, ruleStressItems, stressTest, certifyPrefixes, anyRule, buildRuleSet, ruleSetMatcher } from '@liquidau/rule-miner';
+import { buildRuleSet, certifyPrefixes, hitMatrix, mineRules, ruleSetMatcher } from '@liquidau/rule-miner';
 
-const lexicon = { replacements: { wanna: 'want to' }, classes: { delayed: ['delayed', 'delaying', 'delays'] } };
-const mined = mineRules({ texts, y, groups, authors, background: backgroundMining }, { minGroups: 3, minAuthors: 2, lexicon });
-const { kept } = validateRules(mined, calibration.texts, calibration.y, { lexicon });
-const stress = await stressTest(ruleStressItems(kept, lexicon), (item) => myAdversary(item.description)); // evidence for reviewers
-const cert = certifyPrefixes(kept.map((r) => anyRule([r], backgroundHeldOut, lexicon)), { maxRate: 0.002 });
-const set = buildRuleSet('2026-10-01', [{ label: 'escalate', rules: kept.slice(0, cert.certified) }], { lexicon });
-// ... human review (accepted / rejected feed the next mineRules call) ...
-ruleSetMatcher(set).match('I demand a full refund'); // { id, label } | null
+// Labelled examples (1 = refund request) and ordinary traffic to veto rules that fire on it.
+const texts = ['I want a full refund', 'please give me a full refund now', 'can I get a full refund?', 'where is my parcel', 'thanks for the help', 'how do I change my address'];
+const y: (0 | 1)[] = [1, 1, 1, 0, 0, 0];
+const background = ['what time do you open', 'my parcel is late again', 'thanks, all sorted'];
+
+const rules = mineRules({ texts, y, background }, { minGroups: 3 });
+// Certify on held-out ordinary traffic. Use thousands of texts and a rate like 0.002 in practice.
+const heldOut = ['is the shop open on sunday', 'I love this store', 'how much is delivery', 'can I pay by card'];
+const cert = certifyPrefixes(hitMatrix(rules, heldOut), { maxRate: 0.6 });
+const set = buildRuleSet('2026-10-03', [{ label: 'refund', rules: rules.slice(0, cert.certified) }]);
+console.log(ruleSetMatcher(set).match('I demand a full refund')); // { id: 'refund.r1', label: 'refund' }
 ```
+
+## What's in it
+
+| Area | Exports |
+|---|---|
+| Mining | `mineRules`, `validateRules` |
+| Exceptions | `mineExceptions`, `withExceptions` |
+| Word variants | `Lexicon`, `induceClasses` |
+| Stress test | `stressTest`, `ruleStressItems`, `exceptionStressItems` |
+| Certification | `certifyFalseAlarms`, `certifyPrefixes`, `precisionLowerBound` |
+| Weak labels | `ruleBounds`, `weakLabels`, `disagreementQueues` |
+| Rule sets | `buildRuleSet`, `validateRuleSet`, `ruleSetMatcher`, `diffRuleSets`, `firingReport` |
+| Hard negatives, background | `hardNegativeItems`, `checkBackgroundRecords` |
+
+## Guarantees and limits
+
+- Regexes are re-derived from patterns on load, so matching runs in linear time.
+- Certification is an exact 95% bound on false alarms (labelled negatives) or firing rate (traffic).
+- The stress test gates exceptions only, never rules.
+- Expect high precision, low recall (held out: 11 of 140 positives per head); pair with a classifier.
+- Runs on Node 20+; the tests need Node 22.18+.
+
+## More
+
+- [docs/API.md](docs/API.md): every feature and export, and why each exists.
+- [docs/SAFETY.md](docs/SAFETY.md): linear time, canonical text, and the three exception guards.
+- [docs/EVIDENCE.md](docs/EVIDENCE.md): held-out results from a production support chat.
 
 ## Develop
 
 ```bash
 npm install
-npm test
-npm run typecheck
-npm run build
+npm test        # Node 22.18+ (runs the .ts sources directly)
+npm run build   # dist/ (ESM + .d.ts)
 ```
-
-The compiled package (`dist/`) runs on Node 20+. The test suite runs the `.ts` sources directly,
-which needs Node's built-in type stripping: **Node 22.18+ or 23.6+**. The one runtime dependency,
-[`@liquidau/solvers`](https://www.npmjs.com/package/@liquidau/solvers), is public on npm, so no
-login or token is needed to install.
 
 ## License
 
