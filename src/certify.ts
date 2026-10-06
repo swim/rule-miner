@@ -34,7 +34,12 @@ export function certifyPrefixes(
   },
 ): Certification {
   const { maxRate, confidence = 0.95, records } = options;
+  if (!(maxRate > 0 && maxRate < 1)) throw new Error(`maxRate must be strictly between 0 and 1, got ${maxRate}`);
   const n = fired[0]?.length ?? 0;
+  // Every rule needs evidence on every certification text: a short row would count missing texts as
+  // "didn't fire" (certifying on evidence that isn't there), a long one would count texts beyond n.
+  fired.forEach((row, r) => { if (row.length !== n) throw new Error(`fired[${r}] has ${row.length} entries for ${n} certification texts`); });
+  if (fired.length && n === 0) throw new Error('no certification texts');
   if (records) {
     if (records.length !== n) throw new Error(`records has ${records.length} entries for ${n} certification texts`);
     checkBackgroundRecords(records, ['certify']);

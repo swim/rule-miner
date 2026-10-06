@@ -51,7 +51,7 @@ console.log(ruleSetMatcher(set).match('I demand a full refund')); // { id: 'refu
 |---|---|
 | Mining | `mineRules`, `validateRules` |
 | Exceptions | `mineExceptions`, `withExceptions` |
-| Word variants | `Lexicon`, `induceClasses` |
+| Word variants | `Lexicon` (replacements, optional Porter stemming, classes), `induceClasses`, `porterStem` |
 | Stress test | `stressTest`, `ruleStressItems`, `exceptionStressItems` |
 | Certification | `certifyFalseAlarms`, `certifyPrefixes`, `precisionLowerBound` |
 | Weak labels | `ruleBounds`, `weakLabels`, `disagreementQueues` |
@@ -64,7 +64,7 @@ console.log(ruleSetMatcher(set).match('I demand a full refund')); // { id: 'refu
 - Certification is an exact 95% bound on false alarms (labelled negatives) or firing rate (traffic).
 - The stress test gates exceptions only, never rules.
 - Expect high precision, low recall (held out: 11 of 140 positives per head); pair with a classifier.
-- Runs on Node 20+; the tests need Node 22.18+.
+- Runs on Node 20+ and on edge and browser runtimes (no Node built-ins); tests need Node 22.18+.
 
 ## More
 
@@ -83,3 +83,7 @@ npm run build   # dist/ (ESM + .d.ts)
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Third-party code
+
+`src/stem.ts` is adapted from [stemmer](https://github.com/words/stemmer) 2.0.1 by Titus Wormer (MIT); its notice is kept in the file.

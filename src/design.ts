@@ -37,9 +37,13 @@ export function designRate(hit: readonly boolean[], domain: readonly boolean[], 
   if (domain.length !== hit.length) throw new Error('hit and domain must be the same length');
   if (!domain.some(Boolean)) throw new Error('no sampled unit is in the domain');
   const num = hit.map((h, i) => (h && domain[i] ? 1 : 0)), den = domain.map(Number);
-  const { estimate, se } = stratifiedRatio({ ...design, num, den });
   const effective = kishEffectiveN(den.flatMap((d, i) => (d ? [1 / design.inclusionProbs[i]] : [])));
   if (method === 'exact') {
+    // The point estimate only (Horvitz-Thompson ratio): the exact bound needs no variance, so a
+    // stratum with a single sampled unit (e.g. after reviewer skips) is fine here.
+    let A = 0, B = 0;
+    for (let i = 0; i < num.length; i++) { A += num[i] / design.inclusionProbs[i]; B += den[i] / design.inclusionProbs[i]; }
+    const estimate = A / B;
     const byStratum = new Map<string, number[]>();
     design.strata.forEach((s, i) => (byStratum.get(s) ?? byStratum.set(s, []).get(s)!).push(i));
     const conf = 1 - (1 - confidence) / (2 * byStratum.size);
@@ -57,6 +61,7 @@ export function designRate(hit: readonly boolean[], domain: readonly boolean[], 
     const share = up + down === 0 ? 1 : up / (up + down);
     return { estimate, effective, bound: side === 'upper' ? share : 1 - share };
   }
+  const { estimate, se } = stratifiedRatio({ ...design, num, den });
   const z = normalQuantile(confidence);
   const n = Math.max(1, Math.round(effective)), k = Math.min(n, Math.max(0, Math.round(estimate * n)));
   const bound = side === 'upper'

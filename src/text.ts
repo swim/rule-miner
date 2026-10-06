@@ -8,9 +8,12 @@
  *   tokens      runs of Unicode letters/marks/digits/underscore with internal apostrophes ("don't",
  *               "zoë's"); marks are included so scripts that write vowels and diacritics as
  *               combining characters (Devanagari, Arabic, Thai) and "İ".toLowerCase() stay whole
- *   lexicon     optional: replacements first ("wanna" -> "want to"), then class members -> "<class>".
+ *   lexicon     optional: replacements first ("wanna" -> "want to"), then Porter stems (if
+ *               `stem: 'porter-en'`), then class members -> "<class>".
  *               Compiled once per lexicon OBJECT (cached by identity): don't mutate one after use
  */
+import { porterStem } from './stem.ts';
+
 const TOKEN = /[\p{L}\p{M}\p{N}_]+(?:'[\p{L}\p{M}\p{N}_]+)*/gu;
 const SENTENCE = /[.!?;\n]+/u;
 export const TOKEN_SHAPE = /^[\p{L}\p{M}\p{N}_]+(?:'[\p{L}\p{M}\p{N}_]+)*$/u;
@@ -20,6 +23,15 @@ export interface Lexicon {
   replacements?: Record<string, string>;
   /** Class name -> member tokens; members become "<name>", e.g. { better: ['better', 'happier'] }. */
   classes?: Record<string, string[]>;
+  /**
+   * Stem every token (after replacements, before classes): 'porter-en' is Porter (1980), so
+   * "refunded", "refunding" and "refunds" all match a rule mined on "refund". Off by default. It suits
+   * intent or domain routing, where inflections vary and broader rules are welcome; it makes rules
+   * fire somewhat more often on out-of-scope text, so it is rarely worth it for precision-critical
+   * binary labels. A rule set with a stemming lexicon has format
+   * liquidau-rule-miner/3, so loaders that don't stem refuse it instead of matching unstemmed text.
+   */
+  stem?: 'porter-en';
 }
 
 export function normalize(text: string): string {
@@ -34,6 +46,7 @@ export function rawSegments(text: string): string[] {
 interface CompiledLexicon {
   replace: Map<string, string[]>;
   cls: Map<string, string>;
+  stem: (token: string) => string;
 }
 const compiledLexicons = new WeakMap<Lexicon, CompiledLexicon>();
 
@@ -43,6 +56,7 @@ const compiledLexicons = new WeakMap<Lexicon, CompiledLexicon>();
  */
 export function validateLexicon(lexicon: Lexicon): Lexicon {
   if (typeof lexicon !== 'object' || lexicon === null || Array.isArray(lexicon)) throw new Error('lexicon must be an object');
+  if (lexicon.stem !== undefined && lexicon.stem !== 'porter-en') throw new Error(`lexicon.stem must be 'porter-en', got ${JSON.stringify(lexicon.stem)}`);
   const canonical = (what: string, t: string) => {
     if (!TOKEN_SHAPE.test(t)) throw new Error(`${what} "${t}" is not a single token`);
     if (normalize(t) !== t) throw new Error(`${what} "${t}" is not canonical (expected "${normalize(t)}")`);
@@ -60,6 +74,17 @@ export function validateLexicon(lexicon: Lexicon): Lexicon {
       seen.set(m, name);
     }
   }
+  if (lexicon.stem) {
+    // Stemming can merge members of different classes ("organise" and "organisation" -> "organis").
+    const byStem = new Map<string, string>();
+    for (const [name, members] of Object.entries(lexicon.classes ?? {})) {
+      for (const m of members) {
+        const st = porterStem(m), other = byStem.get(st);
+        if (other !== undefined && other !== name) throw new Error(`with stemming, "${m}" (class ${name}) and a member of ${other} share the stem "${st}"`);
+        byStem.set(st, name);
+      }
+    }
+  }
   return lexicon;
 }
 
@@ -67,9 +92,12 @@ function compiled(lexicon: Lexicon): CompiledLexicon {
   let c = compiledLexicons.get(lexicon);
   if (!c) {
     validateLexicon(lexicon);
+    const stem = lexicon.stem ? porterStem : (t: string) => t;
     c = {
       replace: new Map(Object.entries(lexicon.replacements ?? {}).map(([k, v]) => [k, normalize(v).match(TOKEN) ?? []])),
-      cls: new Map(Object.entries(lexicon.classes ?? {}).flatMap(([name, members]) => members.map((m) => [m, `<${name}>`]))),
+      // Class members are keyed by their stems, since tokens are stemmed before class lookup.
+      cls: new Map(Object.entries(lexicon.classes ?? {}).flatMap(([name, members]) => members.map((m) => [stem(m), `<${name}>`]))),
+      stem,
     };
     compiledLexicons.set(lexicon, c);
   }
@@ -80,8 +108,8 @@ function compiled(lexicon: Lexicon): CompiledLexicon {
 export function segmentTokens(segment: string, lexicon?: Lexicon): string[] {
   const tokens = segment.match(TOKEN) ?? [];
   if (!lexicon) return tokens;
-  const { replace, cls } = compiled(lexicon);
-  return tokens.flatMap((t) => replace.get(t) ?? [t]).map((t) => cls.get(t) ?? t);
+  const { replace, cls, stem } = compiled(lexicon);
+  return tokens.flatMap((t) => replace.get(t) ?? [t]).map((t) => { const s = stem(t); return cls.get(s) ?? s; });
 }
 
 /** Canonical tokens per sentence. */

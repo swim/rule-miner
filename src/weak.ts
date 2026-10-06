@@ -12,7 +12,6 @@
  *
  * "Did not fire" is never a label: rules miss most positives, so a non-firing text is not a negative.
  */
-import { createHash } from 'node:crypto';
 
 import { clopperPearsonUpper } from '@liquidau/solvers';
 
@@ -20,6 +19,7 @@ import { precisionLowerBound } from './certify.ts';
 import { designRate, type SampleDesign } from './design.ts';
 import { canonicalSegments, hitMatrix } from './match.ts';
 import type { RuleSet, RuleSetRule } from './ruleset.ts';
+import { sha256Hex } from './sha256.ts';
 
 export interface RuleBound {
   id: string;
@@ -64,14 +64,16 @@ export interface RuleBoundsInput {
   exclude?: Iterable<string>;
 }
 
+/** A label's FIRING rules (dismissal rules never count as evidence for a label). */
 function rulesFor(set: RuleSet, label: string | undefined, exclude?: Iterable<string>): { label: string; rules: RuleSetRule[] } {
-  const labels = [...new Set(set.rules.map((r) => r.label))];
+  const firing = set.rules.filter((r) => r.effect !== 'dismiss');
+  const labels = [...new Set(firing.map((r) => r.label))];
   if (label === undefined) {
     if (labels.length !== 1) throw new Error(`the rule set has ${labels.length} labels (${labels.join(', ')}) - pass a label`);
     label = labels[0];
   }
   const excluded = new Set(exclude ?? []);
-  return { label, rules: set.rules.filter((r) => r.label === label && !excluded.has(r.id)) };
+  return { label, rules: firing.filter((r) => r.label === label && !excluded.has(r.id)) };
 }
 
 const clopperPearsonLower = (k: number, n: number, confidence: number) => 1 - clopperPearsonUpper(n - k, n, confidence);
@@ -138,7 +140,7 @@ function stableJson(v: unknown): string {
 
 /** SHA-256 of the rule set's content (key order ignored) - for auditing which rules labelled a model's data. */
 export function ruleSetHash(set: RuleSet): string {
-  return createHash('sha256').update(stableJson(set)).digest('hex');
+  return sha256Hex(stableJson(set));
 }
 
 /**
@@ -234,7 +236,7 @@ export function weakLabels(set: RuleSet, texts: readonly string[], bounds: RuleB
   if (dedupe && dedupe.embeddings.length !== texts.length) throw new Error(`dedupe.embeddings has ${dedupe.embeddings.length} entries for ${texts.length} texts`);
 
   const bound = new Map(bounds.rules.filter((b) => b.precision_lower > 0).map((b) => [b.id, b.precision_lower]));
-  const rules = set.rules.filter((r) => r.label === bounds.label && bound.has(r.id));
+  const rules = set.rules.filter((r) => r.label === bounds.label && r.effect !== 'dismiss' && bound.has(r.id));
   const hits = hitMatrix(rules, texts, set.lexicon);
   const key = (t: string) => canonicalSegments(t, set.lexicon).join('\n');
   const heldOut = new Set(exclude.map(key));

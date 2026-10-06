@@ -114,3 +114,17 @@ test('certifyFalseAlarms with the frame: known firing caps each stratum exactly,
   assert.equal(tighter, runs, 'unseen false alarms in strata the rule never fires in are ruled out exactly');
   assert.throws(() => certifyFalseAlarms([[true]], { y: [0], maxRate: 0.5, frame }), /frame needs a design/);
 });
+
+test('designRate works with a single sampled unit in a stratum: exact needs no variance, linearised pools it (solvers 0.7)', () => {
+  // Stratum a: 3 of 100 sampled; stratum b: 1 of 50 sampled (e.g. after reviewer skips).
+  const design = { inclusionProbs: [0.03, 0.03, 0.03, 0.02], strata: ['a', 'a', 'a', 'b'], stratumSizes: { a: 100, b: 50 } };
+  const hit = [false, true, false, false], domain = [true, true, true, true];
+  const r = designRate(hit, domain, design, 'upper', 0.95, 'exact');
+  // Horvitz-Thompson ratio: (1/0.03) / (3/0.03 + 1/0.02) = 33.3 / 150.
+  assert.ok(Math.abs(r.estimate - (1 / 0.03) / (3 / 0.03 + 1 / 0.02)) < 1e-12);
+  assert.ok(r.bound > r.estimate && r.bound <= 1);
+  // Linearised: stratum b's variance is pooled with a (collapsed strata) instead of throwing.
+  const lin = designRate(hit, domain, design, 'upper', 0.95, 'linearised');
+  assert.ok(Math.abs(lin.estimate - r.estimate) < 1e-12);
+  assert.ok(lin.bound > lin.estimate && lin.bound <= 1);
+});
