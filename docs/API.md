@@ -38,3 +38,12 @@ The package imports no Node built-ins, so rule sets can be matched on serverless
 runtimes. `ruleSetHash` uses a pure SHA-256 (`src/sha256.ts`), tested to give the same output as
 `node:crypto`, so hashes recorded before the change still match. A test walks the import graph to
 keep it that way.
+
+## With @liquidau/router
+
+A router release pairs one rule set with one classifier artifact. The router validates the stored
+rule set with `validateRuleSet`, matches the ORIGINAL request text with `ruleSetMatcher(set).evaluate`
+(first firing rule in rule-set order; a firing rule clears every dismissal), and identifies the rule
+set by `ruleSetHash` of the validated set - so rule order is part of a release, and a legacy format
+hashes as its upgraded form. A classifier-only release uses an explicitly empty set:
+`buildRuleSet(version, [])`.
