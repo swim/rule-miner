@@ -14,3 +14,4 @@ export { backgroundTexts, BackgroundError, checkBackgroundRecords, type Backgrou
 export { designRate, type BoundMethod, type SampleDesign } from './design.ts';
 export { porterStem } from './stem.ts';
 export { certifyDismissals, jointLabels, mineDismissals, validateDismissals } from './dismiss.ts';
+export { matchEvidence, type EvidenceMatch, type MatchEvidence, type RuleEvidenceHit, type ScopeEvidence, type SuppressedScope } from './evidence.ts';

@@ -104,6 +104,20 @@ function compiled(lexicon: Lexicon): CompiledLexicon {
   return c;
 }
 
+/**
+ * Internal (evidence.ts): the canonical tokens one raw normalised token becomes - replacement, stem and
+ * class, exactly as segmentTokens applies them - so source provenance reuses the canonicaliser.
+ */
+export function canonicalTokenParts(token: string, lexicon?: Lexicon): string[] {
+  if (!lexicon) return [token];
+  const { replace, cls, stem } = compiled(lexicon);
+  return (replace.get(token) ?? [token]).map((t) => { const s = stem(t); return cls.get(s) ?? s; });
+}
+
+/** Internal (evidence.ts): fresh copies of the token and sentence-separator patterns. */
+export const tokenPattern = () => new RegExp(TOKEN.source, 'gu');
+export const sentencePattern = () => new RegExp(SENTENCE.source, 'gu');
+
 /** Canonical tokens of one normalised segment. */
 export function segmentTokens(segment: string, lexicon?: Lexicon): string[] {
   const tokens = segment.match(TOKEN) ?? [];

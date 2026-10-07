@@ -6,6 +6,7 @@
  * pattern - so a rule set only ever contains regexes this package produces (space-bounded
  * literals, linear time). A hand-edited or corrupted regex is rejected at load time.
  */
+import { matchEvidence, type MatchEvidence } from './evidence.ts';
 import { canonicalSegments, compileRule, hitMatrix } from './match.ts';
 import { patternKey, regexSources, type Pattern } from './pattern.ts';
 import { TOKEN_SHAPE, validateLexicon, type Lexicon } from './text.ts';
@@ -106,22 +107,31 @@ export interface RuleSetMatcher {
    * rules matches and no rule fired. Firing wins, so a message both match is never cleared.
    */
   evaluate(text: string): { fired: { id: string; label: string } | null; dismissed: string[] };
+  /**
+   * evaluate(text) plus source provenance (opt-in, slower): the fired rule's or dismissal rules' scopes
+   * and matched tokens as spans of the original text, or provenance 'unavailable'. Never changes the decision.
+   */
+  evaluateWithEvidence(text: string, options?: { documentId?: string; contextChars?: number }): MatchEvidence;
 }
 
 export function ruleSetMatcher(set: RuleSet): RuleSetMatcher {
   const compiled = set.rules.map((r) => ({ id: r.id, label: r.label, dismiss: r.effect === 'dismiss', fires: compileRule(r) }));
   const firing = compiled.filter((r) => !r.dismiss), dismissing = compiled.filter((r) => r.dismiss);
   const first = (segments: string[]) => { const hit = firing.find((r) => r.fires(segments)); return hit ? { id: hit.id, label: hit.label } : null; };
+  const evaluate = (text: string) => {
+    const segments = canonicalSegments(text, set.lexicon);
+    const fired = first(segments);
+    if (fired) return { fired, dismissed: [] as string[] };
+    return { fired: null, dismissed: [...new Set(dismissing.filter((r) => r.fires(segments)).map((r) => r.label))] };
+  };
   return {
     version: set.version,
     match(text) {
       return first(canonicalSegments(text, set.lexicon));
     },
-    evaluate(text) {
-      const segments = canonicalSegments(text, set.lexicon);
-      const fired = first(segments);
-      if (fired) return { fired, dismissed: [] };
-      return { fired: null, dismissed: [...new Set(dismissing.filter((r) => r.fires(segments)).map((r) => r.label))] };
+    evaluate,
+    evaluateWithEvidence(text, options) {
+      return matchEvidence(set, text, evaluate(text), options);
     },
   };
 }
