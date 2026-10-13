@@ -1,7 +1,7 @@
 /** Validating, evaluating and sanity-checking rules - always through the compiled regexes. */
 import { wilson } from '@liquidau/solvers';
 
-import { designRate, type BoundMethod, type SampleDesign } from './design.ts';
+import { designRate, labelledDesign, type BoundMethod, type SampleDesign } from './design.ts';
 
 import { hitMatrix, type MatchableRule } from './match.ts';
 import { phrasesOf, type Pattern } from './pattern.ts';
@@ -62,7 +62,7 @@ export function evaluateFired(fired: readonly boolean[], y: ReadonlyArray<0 | 1 
   // Labelled units only; recall over positives, false alarms over negatives.
   const keep = y.map((v) => v === 0 || v === 1);
   const sub = <T>(xs: readonly T[]) => xs.filter((_, i) => keep[i]);
-  const d = { inclusionProbs: sub(options.design.inclusionProbs), strata: sub(options.design.strata), stratumSizes: options.design.stratumSizes };
+  const d = labelledDesign(options.design, keep);
   const f = sub(fired), yy = sub(y);
   const interval = (domain: boolean[]): [number, number, number] => {
     if (!domain.some(Boolean)) return [NaN, 0, 1];

@@ -87,6 +87,7 @@ export function validateRuleSet(raw: unknown): RuleSet {
   if (!dismisses && stems !== (set.format === RULESET_FORMAT_STEMMED)) throw new Error(stems ? `a stemming lexicon needs format ${RULESET_FORMAT_STEMMED}` : `format ${RULESET_FORMAT_STEMMED} needs a stemming lexicon`);
   const ids = new Set<string>();
   for (const rule of set.rules) {
+    if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw new Error('every rule must be an object');
     if (typeof rule.id !== 'string' || ids.has(rule.id)) throw new Error(`missing or duplicate rule id ${rule.id}`);
     ids.add(rule.id);
     if (typeof rule.label !== 'string') throw new Error(`rule ${rule.id} has no label`);
@@ -103,10 +104,12 @@ export interface RuleSetMatcher {
   /** The first matching FIRING rule (in rule-set order), or null. Dismissal rules never match here. */
   match(text: string): { id: string; label: string } | null;
   /**
-   * The first firing rule, and the labels dismissed: a label is dismissed when one of its dismissal
-   * rules matches and no rule fired. Firing wins, so a message both match is never cleared.
+   * The first firing rule, every label a firing rule matched (`firing`: the first matching rule per
+   * label, in rule-set order; `fired` is its first entry), and the labels dismissed: a label is
+   * dismissed when one of its dismissal rules matches and no rule fired. Firing wins, so a message both
+   * match is never cleared.
    */
-  evaluate(text: string): { fired: { id: string; label: string } | null; dismissed: string[] };
+  evaluate(text: string): { fired: { id: string; label: string } | null; firing: Array<{ id: string; label: string }>; dismissed: string[] };
   /**
    * evaluate(text) plus source provenance (opt-in, slower): the fired rule's or dismissal rules' scopes
    * and matched tokens as spans of the original text, or provenance 'unavailable'. Never changes the decision.
@@ -116,13 +119,14 @@ export interface RuleSetMatcher {
 
 export function ruleSetMatcher(set: RuleSet): RuleSetMatcher {
   const compiled = set.rules.map((r) => ({ id: r.id, label: r.label, dismiss: r.effect === 'dismiss', fires: compileRule(r) }));
-  const firing = compiled.filter((r) => !r.dismiss), dismissing = compiled.filter((r) => r.dismiss);
-  const first = (segments: string[]) => { const hit = firing.find((r) => r.fires(segments)); return hit ? { id: hit.id, label: hit.label } : null; };
+  const firing_ = compiled.filter((r) => !r.dismiss), dismissing = compiled.filter((r) => r.dismiss);
+  const first = (segments: string[]) => { const hit = firing_.find((r) => r.fires(segments)); return hit ? { id: hit.id, label: hit.label } : null; };
   const evaluate = (text: string) => {
     const segments = canonicalSegments(text, set.lexicon);
-    const fired = first(segments);
-    if (fired) return { fired, dismissed: [] as string[] };
-    return { fired: null, dismissed: [...new Set(dismissing.filter((r) => r.fires(segments)).map((r) => r.label))] };
+    const firing: Array<{ id: string; label: string }> = [];
+    for (const r of firing_) if (!firing.some((f) => f.label === r.label) && r.fires(segments)) firing.push({ id: r.id, label: r.label });
+    if (firing.length) return { fired: firing[0], firing, dismissed: [] as string[] };
+    return { fired: null, firing, dismissed: [...new Set(dismissing.filter((r) => r.fires(segments)).map((r) => r.label))] };
   };
   return {
     version: set.version,

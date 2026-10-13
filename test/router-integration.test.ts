@@ -6,7 +6,7 @@ import { buildRuleSet, LEGACY_RULESET_FORMATS, ruleSetHash, ruleSetMatcher, vali
 test('an explicitly empty rule set is valid: a classifier-only router release', () => {
   const empty = buildRuleSet('none', [], { createdAt: '2026-10-07T00:00:00Z' });
   assert.deepEqual(validateRuleSet(JSON.parse(JSON.stringify(empty))).rules, []);
-  assert.deepEqual(ruleSetMatcher(empty).evaluate('anything at all'), { fired: null, dismissed: [] });
+  assert.deepEqual(ruleSetMatcher(empty).evaluate('anything at all'), { fired: null, firing: [], dismissed: [] });
   assert.match(ruleSetHash(empty), /^[0-9a-f]{64}$/);
 });
 

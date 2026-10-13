@@ -58,6 +58,7 @@ export interface RuleEvidenceHit {
 export interface MatchEvidence {
   /** Exactly ruleSetMatcher(set).evaluate(text). */
   fired: { id: string; label: string } | null;
+  firing: Array<{ id: string; label: string }>;
   dismissed: string[];
   documentId?: string;
   provenance: 'exact-token' | 'unavailable';
@@ -178,9 +179,9 @@ function ruleHit(rule: RuleSetRule, map: Mapping): RuleEvidenceHit {
  * are the fired rule and, when nothing fired, every dismissal rule that matched a dismissed label. A
  * document counts once however many scopes match; evidence never feeds mining or certification.
  */
-export function matchEvidence(set: RuleSet, text: string, decision: { fired: { id: string; label: string } | null; dismissed: string[] }, options: { documentId?: string; contextChars?: number } = {}): MatchEvidence {
+export function matchEvidence(set: RuleSet, text: string, decision: { fired: { id: string; label: string } | null; firing?: Array<{ id: string; label: string }>; dismissed: string[] }, options: { documentId?: string; contextChars?: number } = {}): MatchEvidence {
   if (options.contextChars !== undefined && !(Number.isInteger(options.contextChars) && options.contextChars >= 0 && options.contextChars <= 10_000)) throw new Error('contextChars must be an integer in [0, 10000]');
-  const base = { fired: decision.fired, dismissed: [...decision.dismissed], ...(options.documentId !== undefined ? { documentId: options.documentId } : {}) };
+  const base = { fired: decision.fired, firing: [...(decision.firing ?? (decision.fired ? [decision.fired] : []))], dismissed: [...decision.dismissed], ...(options.documentId !== undefined ? { documentId: options.documentId } : {}) };
   const involved = set.rules.filter((r) => (decision.fired ? r.id === decision.fired.id : r.effect === 'dismiss' && decision.dismissed.includes(r.label)));
   const unavailable = (reason: string): MatchEvidence => ({
     ...base, provenance: 'unavailable', reason,

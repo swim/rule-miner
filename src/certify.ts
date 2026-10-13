@@ -14,7 +14,7 @@
  */
 import { clopperPearsonUpper } from '@liquidau/solvers';
 
-import { designRate, type BoundMethod, type SampleDesign } from './design.ts';
+import { designRate, labelledDesign, type BoundMethod, type SampleDesign } from './design.ts';
 import { checkBackgroundRecords, type RecordLike } from './provenance.ts';
 
 export interface Certification {
@@ -62,11 +62,14 @@ export function certifyPrefixes(
 
 /**
  * A conservative precision estimate in production from the label's prevalence, a lower bound on
- * recall and an upper bound on the firing rate on ordinary (negative) text.
+ * recall and an upper bound on a firing rate. `rate` says which: 'negatives' (default), a false-alarm
+ * rate on negative text (certifyFalseAlarms); 'all', a firing rate over all traffic, correct catches
+ * included (certifyPrefixes, ruleBounds' fire_rate_upper). With 'all', false alarms are at most the
+ * firing rate less the positives' share it must contain: fireRateUpper − prevalence · recallLower.
  */
-export function precisionLowerBound(prevalence: number, recallLower: number, fireRateUpper: number): number {
+export function precisionLowerBound(prevalence: number, recallLower: number, fireRateUpper: number, rate: 'negatives' | 'all' = 'negatives'): number {
   const tp = prevalence * recallLower;
-  const fp = (1 - prevalence) * fireRateUpper;
+  const fp = rate === 'all' ? Math.max(0, fireRateUpper - tp) : (1 - prevalence) * fireRateUpper;
   return tp + fp === 0 ? 1 : tp / (tp + fp);
 }
 
@@ -117,7 +120,7 @@ export function certifyFalseAlarms(
   const negative = y.map((v) => v === 0);
   const labelled = y.map((v) => v === 0 || v === 1);
   if (!negative.some(Boolean)) throw new Error('no labelled negatives to certify false alarms on');
-  // With a design, units without a label drop out; the domain is the negatives.
+  // With a design, units without a label drop out (labelledDesign: missing at random within a stratum); the domain is the negatives.
   const sub = <T>(xs: readonly T[]) => xs.filter((_, i) => labelled[i]);
   const union = new Array<boolean>(n).fill(false);
   const rows: FalseAlarmCertification['rows'] = [];
@@ -131,7 +134,7 @@ export function certifyFalseAlarms(
     const negs = negative.filter(Boolean).length;
     let rate: number, upper: number;
     if (design) {
-      const d = { inclusionProbs: sub(design.inclusionProbs), strata: sub(design.strata), stratumSizes: design.stratumSizes };
+      const d = labelledDesign(design, labelled);
       let cap: Record<string, number> | undefined;
       if (frame) {
         cap = {};

@@ -64,7 +64,7 @@ console.log(ruleSetMatcher(set).match('I demand a full refund')); // { id: 'refu
 - Certification is an exact 95% bound on false alarms (labelled negatives) or firing rate (traffic).
 - The stress test gates exceptions only, never rules.
 - Expect high precision, low recall (held out: 11 of 140 positives per head); pair with a classifier.
-- Runs on Node 20+ and on edge and browser runtimes (no Node built-ins); tests need Node 22.18+.
+- Runs on Node 22.18+ and on edge and browser runtimes (no Node built-ins).
 
 ## More
 
@@ -75,8 +75,9 @@ console.log(ruleSetMatcher(set).match('I demand a full refund')); // { id: 'refu
 ## Develop
 
 ```bash
+nvm use         # Node 22 (.nvmrc); 22.18+ runs .ts directly
 npm install
-npm test        # Node 22.18+ (runs the .ts sources directly)
+npm test        # node --test on the .ts sources, no build or loader
 npm run build   # dist/ (ESM + .d.ts)
 ```
 

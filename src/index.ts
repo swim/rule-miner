@@ -11,7 +11,7 @@ export { ENGLISH_STOPWORDS } from './stopwords.ts';
 export { buildRuleSet, diffRuleSets, firingReport, LEGACY_RULESET_FORMATS, RULESET_FORMAT, RULESET_FORMAT_DISMISS, RULESET_FORMAT_STEMMED, ruleSetMatcher, validateRuleSet, type RuleSet, type RuleSetMatcher, type RuleSetRule } from './ruleset.ts';
 export { disagreementQueues, ruleBounds, ruleSetHash, weakLabels, type DisagreementQueues, type QueueItem, type RuleBound, type RuleBounds, type RuleBoundsInput, type WeakLabel, type WeakLabelOptions, type WeakLabelResult } from './weak.ts';
 export { backgroundTexts, BackgroundError, checkBackgroundRecords, type BackgroundUse, type RecordLike, type RecordRole } from './provenance.ts';
-export { designRate, type BoundMethod, type SampleDesign } from './design.ts';
+export { designRate, labelledDesign, type BoundMethod, type SampleDesign } from './design.ts';
 export { porterStem } from './stem.ts';
 export { certifyDismissals, jointLabels, mineDismissals, validateDismissals } from './dismiss.ts';
 export { matchEvidence, type EvidenceMatch, type MatchEvidence, type RuleEvidenceHit, type ScopeEvidence, type SuppressedScope } from './evidence.ts';

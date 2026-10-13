@@ -16,7 +16,7 @@
 import { clopperPearsonUpper } from '@liquidau/solvers';
 
 import { precisionLowerBound } from './certify.ts';
-import { designRate, type SampleDesign } from './design.ts';
+import { designRate, labelledDesign, type SampleDesign } from './design.ts';
 import { canonicalSegments, hitMatrix } from './match.ts';
 import type { RuleSet, RuleSetRule } from './ruleset.ts';
 import { sha256Hex } from './sha256.ts';
@@ -118,7 +118,7 @@ export function ruleBounds(set: RuleSet, input: RuleBoundsInput): RuleBounds {
         const firesAll = hitMatrix([rule], gold.texts, set.lexicon)[0];
         const keep = gold.y.map((v) => v === 0 || v === 1);
         const sub = <T>(xs: readonly T[]) => xs.filter((_, i) => keep[i]);
-        const d = { inclusionProbs: sub(gold.design.inclusionProbs), strata: sub(gold.design.strata), stratumSizes: gold.design.stratumSizes };
+        const d = labelledDesign(gold.design, keep);
         recallLower = designRate(sub(firesAll), sub(gold.y).map((v) => v === 1), d, 'lower', perStatement, 'exact').bound;
       }
       return {

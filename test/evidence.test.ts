@@ -18,7 +18,7 @@ test('decisions are exactly evaluate(); evidence maps matches back to original c
   const texts = ['Hello there. I want a REFUND, please!', 'I was charged two times; awful', 'thanks a lot', 'thanks. Refund please', 'nothing here', '', '🙂\uD800 refund please'];
   for (const t of texts) {
     const e = m.evaluateWithEvidence(t, { documentId: 'doc-1' });
-    assert.deepEqual({ fired: e.fired, dismissed: e.dismissed }, m.evaluate(t), t);
+    assert.deepEqual({ fired: e.fired, firing: e.firing, dismissed: e.dismissed }, m.evaluate(t), t);
     assert.equal(e.documentId, 'doc-1');
   }
   const t = 'Hello there. I want a REFUND, please!';
@@ -77,7 +77,7 @@ test('context-dependent normalisation: clusters grow to stay exact, and unverifi
 
   const t = 'Σ\u0301Σ οδος';
   const e = m.evaluateWithEvidence(t);
-  assert.deepEqual({ fired: e.fired, dismissed: e.dismissed }, m.evaluate(t), 'the decision is unaffected');
+  assert.deepEqual({ fired: e.fired, firing: e.firing, dismissed: e.dismissed }, m.evaluate(t), 'the decision is unaffected');
   assert.equal(e.provenance, 'unavailable');
   assert.match(e.reason!, /context-dependent/);
   assert.ok(e.hits.length === 1 && e.hits.every((h) => h.precision === 'unavailable' && h.scopes.length === 0));

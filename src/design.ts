@@ -22,6 +22,34 @@ export type BoundMethod = 'exact' | 'linearised';
 
 function checkDesign(design: SampleDesign, n: number): void {
   if (design.inclusionProbs.length !== n || design.strata.length !== n) throw new Error(`design has ${design.inclusionProbs.length} inclusion probabilities and ${design.strata.length} strata for ${n} examples`);
+  const count = new Map<string, number>();
+  for (const s of design.strata) count.set(s, (count.get(s) ?? 0) + 1);
+  for (const [s, k] of count) {
+    const N = design.stratumSizes[s];
+    if (!(Number.isFinite(N) && N >= k)) throw new Error(`stratum ${s}: stratumSizes gives ${N} for ${k} sampled unit(s)`);
+  }
+  design.inclusionProbs.forEach((p, i) => {
+    const s = design.strata[i], expected = count.get(s)! / design.stratumSizes[s];
+    if (!(p > 0 && p <= 1) || Math.abs(p - expected) > 1e-9 * Math.max(1, expected)) throw new Error(`stratum ${s}: inclusionProbs[${i}] = ${p} but n_h / N_h = ${expected} (stratified simple random sampling only)`);
+  });
+}
+
+/**
+ * The design of the labelled units only (`keep`): unlabelled units (e.g. reviewer skips) drop out, and
+ * each stratum's inclusion probability becomes n'_h / N_h for its n'_h labelled units. This assumes
+ * labels are missing at random within a stratum (a second-phase simple random subsample); a skip that
+ * depends on the label would bias every design-based bound.
+ */
+export function labelledDesign(design: SampleDesign, keep: readonly boolean[]): SampleDesign {
+  if (keep.length !== design.strata.length) throw new Error(`keep has ${keep.length} entries for ${design.strata.length} units`);
+  const total = new Map<string, number>(), kept = new Map<string, number>();
+  design.strata.forEach((s, i) => { total.set(s, (total.get(s) ?? 0) + 1); if (keep[i]) kept.set(s, (kept.get(s) ?? 0) + 1); });
+  const idx = keep.flatMap((k, i) => (k ? [i] : []));
+  return {
+    inclusionProbs: idx.map((i) => design.inclusionProbs[i] * kept.get(design.strata[i])! / total.get(design.strata[i])!),
+    strata: idx.map((i) => design.strata[i]),
+    stratumSizes: design.stratumSizes,
+  };
 }
 
 /**
@@ -63,7 +91,8 @@ export function designRate(hit: readonly boolean[], domain: readonly boolean[], 
   }
   const { estimate, se } = stratifiedRatio({ ...design, num, den });
   const z = normalQuantile(confidence);
-  const n = Math.max(1, Math.round(effective)), k = Math.min(n, Math.max(0, Math.round(estimate * n)));
+  // The floor at the Kish size rounds the count conservatively: up for an upper bound, down for a lower one.
+  const n = Math.max(1, Math.round(effective)), k = Math.min(n, Math.max(0, side === 'upper' ? Math.ceil(estimate * n - 1e-9) : Math.floor(estimate * n + 1e-9)));
   const bound = side === 'upper'
     ? Math.min(1, Math.max(estimate + z * se, clopperPearsonUpper(k, n, confidence)))
     : Math.max(0, Math.min(estimate - z * se, clopperPearsonLower(k, n, confidence)));
